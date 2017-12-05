@@ -30,7 +30,7 @@ const template = {
 }
 
 
-class CodeApp extends React.Component {
+class CodeApp extends Component {
   constructor(props) {
     super(props)
 
@@ -40,20 +40,37 @@ class CodeApp extends React.Component {
       const withoutHash = window.location.hash.slice(1)
       const parsedWithJSURL = JSURL.tryParse(withoutHash)
 
-      values = parsedWithJSURL
-        ? parsedWithJSURL
-        : withoutHash.split(',').map(undecoded => decodeURIComponent(undecoded))
+      if (parsedWithJSURL) {
+        values = parsedWithJSURL
+      } else {
+        values = withoutHash.split(',').map(undecoded => decodeURIComponent(undecoded))
+      }
+
+      if (props.urlLogger) {
+        const format = Boolean(parsedWithJSURL) ? 'jsurl' : 'basic encode'
+
+        props.urlLogger(format, withoutHash)
+      }
     }
 
     this.state = {
       values,
       results: [],
-      runFromIndex: null,
-
+      runToIndex: null,
     }
 
-    window.state = this.state
-    window.updateResults = this.updateResults.bind(this)
+    const { uniqueKey = 0 } = props
+
+    if (!window.state) {
+      window.state = {}
+    }
+
+    window.state[uniqueKey] = this.state
+
+    if (!window.updateResults) {
+      window.updateResults = {}
+    }
+    window.updateResults[uniqueKey] = this.updateResults.bind(this)
   }
 
   componentWillMount () {
@@ -85,13 +102,18 @@ doc['run-button'].bind('click', editor.run)
 
     if (isJSURL) {
       encoded = JSURL.stringify(filteredCode)
+      if (this.props.generateJSUrlLogger) {
+        this.props.generateJSUrlLogger(encoded)
+      }
     } else {
       encoded = filteredCode.map((value, i) => encodeURIComponent(value)).join(',')
+      if (this.props.generateUrlLogger) {
+        this.props.generateUrlLogger(encoded)
+      }
     }
 
     if (this.props.onGenerateURL) {
       return this.props.onGenerateURL(encoded)
-      // return this.setState({exportedText: encoded})
     }
 
     window.location.hash = encoded
@@ -110,9 +132,15 @@ doc['run-button'].bind('click', editor.run)
       return false
     }
     const object = JSON.parse(result)
+
     if (!object) {
       return alert('Please check format of file')
     }
+
+    if (this.props.uploadIpynbLogger) {
+      this.props.uploadIpynbLogger(result)
+    }
+
     const { cells } = object
 
     if (Array.isArray(cells)) {
@@ -132,6 +160,11 @@ doc['run-button'].bind('click', editor.run)
   downloadFile = () => {
     const { values } = this.state
     const file = this.generateFile(values)
+
+    if (this.props.downloadIpynbLogger) {
+      this.props.downloadIpynbLogger('Untitled.ipynb', file)
+    }
+
     if (this.props.onDownloadFile) {
       return this.props.onDownloadFile(JSON.stringify(file))
     }
@@ -161,18 +194,25 @@ doc['run-button'].bind('click', editor.run)
     return template
   }
 
-  onCodeChange = (value, index) => {
-    const { isOwnState, updateCode } = this.props
+  updateGlobalState = () => {
+    const { uniqueKey = 0 } = this.props
 
-    if (isOwnState) {
-      this.setState(state => ({
-        values: [
-          ...state.values.slice(0, index),
-          value,
-          ...state.values.slice(index + 1)
-        ]
-      }), () => {window.state = this.state})
+    window.state = {
+      ...window.state,
+      [uniqueKey]: this.state
     }
+  }
+
+  onCodeChange = (value, index) => {
+    const { updateCode } = this.props
+
+    this.setState(state => ({
+      values: [
+        ...state.values.slice(0, index),
+        value,
+        ...state.values.slice(index + 1)
+      ]
+    }), this.updateGlobalState)
 
     if (updateCode) {
       updateCode(value, index)
@@ -180,14 +220,14 @@ doc['run-button'].bind('click', editor.run)
   }
 
   onIndexChange = index => {
-    const { isOwnState = false, updateIndex } = this.props
+    const { updateIndex, uniqueKey = 0 } = this.props
 
-    if (isOwnState) {
-      this.setState({runFromIndex: index}, () => {
-        window.state = this.state
-        document.getElementById('run-button').click();
-      })
-    }
+    this.setState({runToIndex: index}, () => {
+      // window.state = this.state
+      window.uniqueKey = uniqueKey
+      window.runToIndex = index
+      document.getElementById('run-button').click();
+    })
 
     if (updateIndex) {
       updateIndex(index)
@@ -201,8 +241,17 @@ doc['run-button'].bind('click', editor.run)
           value,
           ...state.results.slice(index + 1)
         ],
-        runFromIndex: null
-      })
+        runToIndex: null
+      }), 
+      () => {
+        if (index === this.state.runToIndex) {
+          // last box was executed
+
+          if (this.props.runAllLogger) {
+            this.props.runAllLogger(this.state.results)
+          }
+        }
+      }
     )
 
     const { updateResults } = this.props
@@ -212,14 +261,11 @@ doc['run-button'].bind('click', editor.run)
     }
   }
 
-  render() {
-    const { isOwnState = false, hideButtons = false, readOnlyTests = false, onUploadFile } = this.props
-    let { values, results, exportedText } = this.state
+  runAll = () => this.onIndexChange(numberOfInputs - 1)
 
-    if (!isOwnState && this.props.userCode) {
-      values = this.props.userCode.values
-      results = this.props.userCode.results
-    }
+  render() {
+    const { hideButtons = false, readOnlyTests = false, onUploadFile } = this.props
+    const { values, results } = this.state
 
     const codeLength = this.displayNumberOfCharacters(values)
     const array = Array.from(Array(numberOfInputs).keys())
@@ -235,7 +281,7 @@ doc['run-button'].bind('click', editor.run)
             index={number}
             key={number}
             onRun={() => this.onIndexChange(number)}
-            runAll={() => this.onIndexChange(numberOfInputs - 1)}
+            runAll={this.runAll}
             showButton={!readOnlyTests || (number === array.length -1) } />
         )}
         <p>Number of characters: {codeLength}</p>
