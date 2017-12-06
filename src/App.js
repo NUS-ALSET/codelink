@@ -2,8 +2,6 @@ import React, { Component } from 'react';
 import JSURL from 'jsurl'
 import Editor from './Editor'
 
-const numberOfInputs = 2
-
 const template = {
   "cells": [],
   "metadata": {
@@ -29,15 +27,19 @@ const template = {
   "nbformat_minor": 2
 }
 
-const input = '# This is a header\n\nAnd this is a paragraph'
-
-
 class CodeApp extends Component {
   constructor(props) {
     super(props)
 
+    const numberOfInputs = props.showModelSolution ? 3 : 2
+
     let values = []
     let markdownValues = []
+
+    for (let i = numberOfInputs; i > 0; i--) {
+      markdownValues.push('')
+      values.push('')
+    }
 
     const { hash } = window.location
 
@@ -46,8 +48,29 @@ class CodeApp extends Component {
       const parsedWithJSURL = JSURL.tryParse(withoutHash)
 
       if (parsedWithJSURL) {
-        values = parsedWithJSURL.code || []
-        markdownValues = parsedWithJSURL.markdown || []
+        if (parsedWithJSURL.code) {
+          if (props.showModelSolution) {
+            values = [
+              ...parsedWithJSURL.code.slice(0,1),
+              '',
+              ...parsedWithJSURL.code.slice(1)
+            ]
+          } else {
+            values = parsedWithJSURL.code
+          }
+        }
+
+        if (parsedWithJSURL.markdown) {
+          if (props.showModelSolution) {
+            markdownValues = [
+              ...parsedWithJSURL.markdown.slice(0,1),
+              '',
+              ...parsedWithJSURL.markdown.slice(1)
+            ]
+          } else {
+            markdownValues = parsedWithJSURL.markdown
+          }
+        }
       } else {
         const parsed = {}
         withoutHash.split('&').forEach(undecoded => {
@@ -57,8 +80,29 @@ class CodeApp extends Component {
           parsed[parts[0]] = array
         })
 
-        values = parsed.code || []
-        markdownValues = parsed.markdown || []
+        if (parsed.code) {
+          if (props.showModelSolution) {
+            values = [
+              ...parsed.code.slice(0,1),
+              '',
+              ...parsed.code.slice(1)
+            ]
+          } else {
+            values = parsed.code
+          }
+        }
+
+        if (parsed.markdown) {
+          if (props.showModelSolution) {
+            markdownValues = [
+              ...parsed.markdown.slice(0,1),
+              '',
+              ...parsed.markdown.slice(1)
+            ]
+          } else {
+            markdownValues = parsed.markdown
+          }
+        }
       }
 
       if (props.urlLogger) {
@@ -73,7 +117,9 @@ class CodeApp extends Component {
       results: [],
       runToIndex: null,
       isRunning: null,
-      markdownValues
+      markdownValues,
+      error: false,
+      numberOfInputs
     }
 
     const { uniqueKey = 0 } = props
@@ -108,10 +154,26 @@ doc['run-button'].bind('click', editor.run)
 
   generateUrl = (isJSURL = false) => {
     const { values, markdownValues } = this.state
+    const { showModelSolution = false } = this.props
+
+    // skip second code box if showModelSolution
+    const codeValues = showModelSolution
+      ? [
+          ...values.slice(0,1),
+          ...values.slice(2)
+        ]
+      : values
+
+    const markdownCodeValues = showModelSolution
+      ? [
+          ...markdownValues.slice(0,1),
+          ...markdownValues.slice(2)
+        ]
+      : markdownValues
 
     let encoded
 
-    const objectToEncode = {code: values, markdown: markdownValues}
+    const objectToEncode = {code: codeValues, markdown: markdownCodeValues}
 
     if (isJSURL) {
       encoded = JSURL.stringify(objectToEncode)
@@ -159,9 +221,9 @@ doc['run-button'].bind('click', editor.run)
 
     const { cells } = object
 
-    console.log(cells)
-
     if (Array.isArray(cells)) {
+      const { showModelSolution = false } = this.props
+
       let counter = 0
       const code = []
       const markdown = []
@@ -169,8 +231,16 @@ doc['run-button'].bind('click', editor.run)
       cells.forEach((cell, i) => {
         const value = cell.source.join('')
         if (cell.cell_type === 'code') {
+          if (showModelSolution && code.length === 1) {
+            // add emplty value for second box
+            code.push('')
+          }
           code.push(value)
         } else {
+          if (showModelSolution && markdown.length === 1) {
+            // add emplty value for second box
+            markdown.push('')
+          }
           markdown.push(value)
         }
         counter += value.length
@@ -187,10 +257,26 @@ doc['run-button'].bind('click', editor.run)
 
   downloadFile = () => {
     const { values, markdownValues } = this.state
+    const { showModelSolution = false } = this.props
+
+    const codeValues = showModelSolution
+      ? [
+          ...values.slice(0,1),
+          ...values.slice(2)
+        ]
+      : values
+
+    const markdownCodeValues = showModelSolution
+      ? [
+          ...markdownValues.slice(0,1),
+          ...markdownValues.slice(2)
+        ]
+      : markdownValues
+
     this.template = {...template}
-    // const file = 
-    this.generateFile({type: 'code', values})
-    this.generateFile({type: 'markdown', values: markdownValues})
+
+    this.generateFile({type: 'code', values: codeValues})
+    this.generateFile({type: 'markdown', values: markdownCodeValues})
 
     if (this.props.downloadIpynbLogger) {
       this.props.downloadIpynbLogger('Untitled.ipynb', this.template)
@@ -222,7 +308,6 @@ doc['run-button'].bind('click', editor.run)
         }
   
         if (obj.type === 'code') {
-          // console.log()
           object['outputs'] = []
           object['execution_count'] = null
         }
@@ -261,7 +346,7 @@ doc['run-button'].bind('click', editor.run)
   onIndexChange = index => {
     const { updateIndex, uniqueKey = 0 } = this.props
 
-    this.setState({runToIndex: index, isRunning: Math.random()}, () => {
+    this.setState({runToIndex: index, isRunning: Math.random(), error: false}, () => {
       window.uniqueKey = uniqueKey
       window.runToIndex = index
       document.getElementById('run-button').click();
@@ -272,21 +357,24 @@ doc['run-button'].bind('click', editor.run)
     }
   }
 
-  updateResults = (value, index) => {
+  updateResults = (value, index, error) => {
+    const hasErrors = !error
+
     this.setState( state => ({
         results: [
           ...state.results.slice(0, index),
           value,
           ...state.results.slice(index + 1)
         ],
-        runToIndex: null
+        error: hasErrors || state.error
       }), 
       () => {
         if (index === this.state.runToIndex) {
           // last box was executed
+          this.setState({runToIndex: null})
 
           if (this.props.runAllLogger) {
-            this.props.runAllLogger(this.state.results)
+            this.props.runAllLogger(this.state.results, this.state.error)
           }
         }
       }
@@ -307,32 +395,34 @@ doc['run-button'].bind('click', editor.run)
         ...state.markdownValues.slice(index + 1)
       ]
     }))
+
+    if (this.props.updateMarkdown) {
+      this.props.updateMarkdown(value, index)
+    }
   }
 
-  runAll = () => this.onIndexChange(numberOfInputs - 1)
+  runAll = () => this.onIndexChange(this.state.numberOfInputs - 1)
 
   render() {
-    const { hideButtons = false, readOnlyTests = false, onUploadFile } = this.props
+    const { hideButtons = false, readOnlyTests = false, onUploadFile, problem = false } = this.props
     const { values, results, isRunning, markdownValues } = this.state
 
     const codeLength = this.displayNumberOfCharacters(values)
     const markdownLength = this.displayNumberOfCharacters(markdownValues)
     const totalLength = codeLength + markdownLength
 
-    const array = Array.from(Array(numberOfInputs).keys())
+    const array = Array.from(Array(this.state.numberOfInputs).keys())
 
     return (
       <div className="container">
-        {!!markdownLength &&
-          <div>
-            <p>Press Shift + Enter to execute code</p>
-            <p>Use double-click or click+enter on markdown boxes to edit them.</p>
-          </div>
-        }
+        <div>
+          <p>Press Shift + Enter to execute code</p>
+          <p>Use double-click or click+enter on markdown boxes to edit them.</p>
+        </div>
         {array.map(number =>
           <Editor
             isRunning={isRunning}
-            readOnly={readOnlyTests}
+            readOnly={readOnlyTests || (problem && (number === array.length - 1))}
             value={values[number]}
             markdownValue={markdownValues[number]}
             result={results[number]}

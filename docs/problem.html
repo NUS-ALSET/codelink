@@ -28,6 +28,7 @@
     <link rel="stylesheet" href="css/doc_brython.css">
     <link rel="stylesheet" href="css/console.css">
     <link rel="stylesheet" href="css/ace.css">
+    <link rel="stylesheet" href="css/stackoverflow.css">
 
     <script type="text/javascript" src="src/brython_builtins.js"></script>
     <script type="text/javascript" src="src/version_info.js"></script>
@@ -67,6 +68,9 @@
     <script src="//npmcdn.com/react-markdown/umd/react-markdown.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/react-ace/5.7.0/react-ace.js"></script>
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.5/require.js"></script>
+
+
+    
     <script src="python.js" type="text/javascript"></script>
     <script src="brace.js" type="text/javascript"></script>
     <script src="jsurl.js" type="text/javascript"></script>
@@ -88,103 +92,151 @@
 
       To begin the development, run `npm start` or `yarn start`.
       To create a production bundle, use `npm run build` or `yarn build`.
+
     -->
+
     <script type="text/javascript">var exports = {};</script>
     <script type="text/babel" src="./Codelink.js"></script>
 
     <script type="text/babel">
-      const updateResults = (value, index) => ({
-        type: 'UPDATE_RESULTS',
-        value,
-        index
-      })
-
-      const updateCode = (value, index) => ({
-        type: 'UPDATE_CODE',
-        value,
-        index
-      })
-
-      const updateIndex = index => ({
-        type: 'UPDATE_INDEX',
-        index
-      })
-
-      const urlLogger = (format, url) => ({
-        type: 'LOADED_FROM_URL',
-        format,
-        url
-      })
-
-      const generateUrlLogger = url => ({
-        type: 'GENERATE_URL',
-        url
-      })
-
-      const generateJSUrlLogger = jsurl => ({
-        type: 'GENERATE_JSURL',
-        jsurl
-      })
-
-      const downloadIpynbLogger = (title, json) => ({
-        type: 'DOWNLOAD_IPYNB',
-        title,
-        json
-      })
-
-      const uploadIpynbLogger = json => ({
-        type: 'UPLOAD_IPYNB',
-        json
-      })
-
-      const runAllLogger = (output, errors) => ({
-        type: 'RUN_ALL',
-        output,
-        errors
-      })
-
       class App extends React.Component {
         constructor(props) {
           super(props)
 
           this.state = {
+            upvoteCount: 2,
             exportedText: '',
-            jsonToImport: ''
+            jsonToImport: '',
+            upvote: null,
+            comments: ['too easy', 'wow, that was interesting!'],
+            skills: [
+              {name: 'def', value: 9},
+              {name: 'function', value: 5},
+            ],
+            skillValue: '',
+            votedSkill: null,
+            isSkillAdded: false,
+            success: false
+          }
+        }
+
+        onChange = isUpvote => {
+          const { upvote, upvoteCount } = this.state
+
+          if (isUpvote !== upvote) {
+            const diff = upvote === null ? 1 : 2
+            const newCount = isUpvote
+              ? upvoteCount + diff
+              : upvoteCount - diff
+
+            this.setState({
+              upvote: isUpvote,
+              upvoteCount: newCount
+            })
+          }
+        }
+
+        saveComment = () => {
+          const { commentValue, comments } = this.state
+
+          if (commentValue) {
+            this.setState({
+              comments: [
+                ...comments,
+                commentValue
+              ],
+              commentValue: ''
+            })
+          }
+        }
+
+        voteForSkill = i => {
+          const { skills, votedSkill } = this.state
+
+          if (votedSkill === null) {
+            const skill = skills[i]
+            this.setState({
+              skills: [
+                ...skills.slice(0, i),
+                {...skill, value: skill.value + 1},
+                ...skills.slice(i + 1)
+              ],
+              votedSkill: i
+            })
+          }
+        }
+
+        addSkill = () => {
+          const { skillValue, isSkillAdded, skills } = this.state
+
+          if (!isSkillAdded && skillValue) {
+            this.setState({
+              skills: [
+                ...skills,
+                {name: skillValue, value: 1}
+              ],
+              isSkillAdded: true,
+              votedSkill: skills.length
+            })
+          }
+        }
+
+        runAllLogger = (values, hasError) => {
+          if (!hasError) {
+            this.setState({success: true})
           }
         }
 
         render() {
-          const { exportedText, jsonToImport } = this.state
+          const { exportedText, jsonToImport, upvoteCount, upvote, comments,
+            commentValue, skills, skillValue, votedSkill, isSkillAdded, success } = this.state
           return (
             <div>
-              <div>
-                <h3> Default </h3>
-                <CodeApp uniqueKey={0} />
+              <div style={{display: 'flex'}}>
+              <div className="vote">
+                <a
+                  className={`vote-up-off ${upvote ? 'vote-up-on' : ''}`}
+                  title="This question shows research effort; it is useful and clear"
+                  onClick={() => this.onChange(true)}
+                  style={{marginTop: '60px'}}>
+                  up vote
+                </a>
+                <span itemProp="upvoteCount" className="vote-count-post ">{upvoteCount}</span>
+                <a
+                  className={`vote-down-off ${upvote === false ? 'vote-down-on' : ''}`}
+                  title="This question does not show any research effort; it is unclear or not useful"
+                  onClick={() => this.onChange(false)}>
+                  down vote
+                </a>
               </div>
-              <hr />
-              <div>
-                <h3> Dispatching </h3>
-                <CodeApp
-                  uniqueKey={1}
-                  updateResults={(value, index) => console.log(updateResults(value, index))}
-                  updateIndex={index => console.log(updateIndex(index))}
-                  updateCode={(value, index) => console.log(updateCode(value, index))} 
-                  urlLogger={(format,url) => console.log(urlLogger(format,url))}
-                  generateUrlLogger={url => console.log(generateUrlLogger(url))}
-                  generateJSUrlLogger={url => console.log(generateJSUrlLogger(url))}
-                  downloadIpynbLogger={(title, json) => console.log(downloadIpynbLogger(title, json))}
-                  uploadIpynbLogger={(title, json) => console.log(uploadIpynbLogger(title, json))}
-                  runAllLogger={(output, errors) => console.log(runAllLogger(output, errors))}
-                />
+              <CodeApp problem={true} runAllLogger={this.runAllLogger} />
               </div>
-              <hr />
               <div>
-                <h3> External Run All Button </h3>
-                <CodeApp uniqueKey={2} ref={ c => { this.codelink = c}} />
-                <button onClick={() => this.codelink && this.codelink.runAll()}>
-                  Run All
-                </button> 
+                {comments.map((comment, i) => <p key={i}>{comment}</p>)}
+                <input value={commentValue} onChange={e => this.setState({commentValue: e.target.value})} />
+                <button onClick={this.saveComment}>Post your comment</button>
               </div>
+              {success &&
+                <div>
+                  <p>What skills does this problem require?</p>
+                  <p>
+                    <input value={skillValue} onChange={e => !isSkillAdded && this.setState({skillValue: e.target.value})} placeholder="________" style={{width: '60px'}} />
+                    skill is required to solve this problem.
+                    <button onClick={this.addSkill}>Add</button>
+                  </p>
+                  {skills.map((skill, i) => (
+                    <div key={i}>
+                      
+                      {votedSkill === i
+                        ? <span style={{fontWeight: 700, fontSize: '23px'}}>+</span>
+                        : <span onClick={() => this.voteForSkill(i)}>+</span>
+                      }
+                      <span>{skill.value} - {skill.name}</span>
+                    </div>
+                  ))}
+                  {votedSkill !== null && <button>Continue</button>}
+                </div>
+              }
             </div>
           )
         }
