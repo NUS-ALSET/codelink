@@ -6,8 +6,10 @@
     },
     "logged_events": {
       ".read": "auth != null",
-      ".write": "auth != null",
-    	".indexOn": "createdAt"
+      "$logKey": {
+        ".write": "auth != null && !data.exists()",
+        ".indexOn": "createdAt"
+      }
     },
     "problems": {
       ".read": "auth != null",
@@ -56,10 +58,7 @@
         ".write": "auth != null && (
           !data.exists() && newData.child('owner').exists() && newData.child('owner').val() == auth.uid ||
           data.exists() && data.child('owner').val() == auth.uid 
-        )",
-        "password" : {
-          ".read": "false",
-        }
+        )"
       }
     },
     "studentCoursePasswords": {
@@ -67,8 +66,8 @@
       "$courseKey": {
         "$studentKey": {
           ".write": "auth != null && !data.exists() && $studentKey == auth.uid &&
-          root.child('courses/' + $courseKey).exists() &&
-          root.child('courses/' + $courseKey + '/password').val() == newData.val()"
+          root.child('coursePasswords/' + $courseKey).exists() &&
+          root.child('coursePasswords/' + $courseKey).val() == newData.val()"
         }
       }
     },
@@ -92,6 +91,32 @@
           ".read": "auth != null && root.child('paths/' + $pathKey).exists() &&
             root.child('paths/' + $pathKey + '/owner').val() == auth.uid
           ",
+        }
+      }
+    },
+    "coursePasswords": {
+      ".read": "false",
+      "$courseKey": {
+        ".write": "auth != null && (
+          !root.child('courses/' + $courseKey).exists() ||
+          root.child('courses/' + $courseKey).exists() &&
+          root.child('courses/' + $courseKey + '/owner').val() == auth.uid)"
+      }
+    },
+    "users": {
+      ".read": "auth != null",
+      "$userKey": {
+        ".write": "auth != null && auth.uid == $userKey",
+      }
+    },
+    "assignments": {
+      "$courseKey": {
+        ".read": "auth != null && root.child('courses/' + $courseKey).exists() &&
+          root.child('courses/' + $courseKey + '/owner').val() == auth.uid",
+        ".write": "auth != null && root.child('courses/' + $courseKey).exists() &&
+          root.child('courses/' + $courseKey + '/owner').val() == auth.uid",
+        "$assignmentKey": {
+          ".read": "auth != null && root.child('courseMembers/' + $courseKey + '/' + auth.uid).exists()"
         }
       }
     }
